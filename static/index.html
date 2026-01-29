@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MediaTracker</title>
+    <style>
+        :root {
+            --bg: #1a1a1a;
+            --card: #2d2d2d;
+            --text: #ffffff;
+            --accent: #00d26a; /* Verde tipo MongoDB */
+            --danger: #ff4d4d;
+        }
+        body { font-family: sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        h1 { text-align: center; color: var(--accent); }
+        
+        /* Formulario */
+        .form-container { max-width: 600px; margin: 0 auto 30px; background: var(--card); padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        input, select { width: 100%; padding: 10px; margin: 5px 0; background: #3d3d3d; border: none; color: white; border-radius: 5px; box-sizing: border-box;}
+        button#add-btn { width: 100%; padding: 10px; background: var(--accent); border: none; font-weight: bold; cursor: pointer; color: #000; margin-top: 10px; border-radius: 5px;}
+        button#add-btn:hover { opacity: 0.9; }
+
+        /* Lista de Series (Grid) */
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; max-width: 1000px; margin: 0 auto; }
+        .card { background: var(--card); padding: 20px; border-radius: 10px; position: relative; border-left: 4px solid var(--accent); transition: transform 0.2s;}
+        .card:hover { transform: translateY(-3px); }
+        .card h3 { margin: 0 0 10px 0; font-size: 1.2em; }
+        .badge { background: #444; padding: 2px 8px; border-radius: 4px; font-size: 0.8em; color: #aaa; }
+        .progress { font-weight: bold; color: var(--accent); margin: 10px 0; }
+        .actions { margin-top: 15px; display: flex; gap: 10px; }
+        
+        button.sm { padding: 5px 10px; border: none; border-radius: 4px; cursor: pointer; color: white; font-size: 0.9em; }
+        .btn-link { background: #007bff; text-decoration: none; padding: 6px 10px; border-radius: 4px; color: white; font-size: 0.9em; display: inline-block;}
+        .btn-update { background: #e0a800; }
+        .btn-delete { background: var(--danger); }
+
+    </style>
+</head>
+<body>
+
+    <h1>📺 MediaTracker</h1>
+
+    <div class="form-container">
+        <input type="text" id="title" placeholder="Título (ej: One Piece)" required>
+        <select id="type">
+            <option value="Anime">Anime</option>
+            <option value="Manga">Manga</option>
+            <option value="Serie">Serie</option>
+            <option value="Libro">Libro</option>
+        </select>
+        <input type="text" id="progress" placeholder="Progreso (ej: Cap 105)" required>
+        <input type="text" id="link" placeholder="Link (ej: crunchyroll.com...)" required>
+        <button id="add-btn" onclick="addMedia()">+ Agregar Nuevo</button>
+    </div>
+
+    <div class="grid" id="media-list">
+        </div>
+
+    <script>
+        const API_URL = "http://localhost:8080/media";
+
+        // 1. Cargar datos al iniciar
+        async function loadMedia() {
+            const res = await fetch(API_URL);
+            const data = await res.json();
+            const container = document.getElementById("media-list");
+            container.innerHTML = ""; // Limpiar
+
+            data.forEach(item => {
+                const card = document.createElement("div");
+                card.className = "card";
+                card.innerHTML = `
+                    <h3>${item.title} <span class="badge">${item.type}</span></h3>
+                    <div class="progress">📍 ${item.progress}</div>
+                    <div class="actions">
+                        <a href="${item.link}" target="_blank" class="btn-link">Ver 🔗</a>
+                        <button class="sm btn-update" onclick="updateProgress('${item.id}', '${item.title}')">✏️ Edit</button>
+                        <button class="sm btn-delete" onclick="deleteMedia('${item.id}')">🗑️</button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        // 2. Agregar nuevo
+        async function addMedia() {
+            const title = document.getElementById("title").value;
+            const type = document.getElementById("type").value;
+            const progress = document.getElementById("progress").value;
+            const link = document.getElementById("link").value;
+
+            if(!title || !progress) return alert("Llena los datos mínimos!");
+
+            await fetch(API_URL, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title, type, progress, link })
+            });
+
+            // Limpiar inputs y recargar
+            document.getElementById("title").value = "";
+            document.getElementById("progress").value = "";
+            document.getElementById("link").value = "";
+            loadMedia();
+        }
+
+        // 3. Borrar
+        async function deleteMedia(id) {
+            if(confirm("¿Seguro que quieres borrarlo?")) {
+                await fetch(`${API_URL}/${id}`, { method: "DELETE" });
+                loadMedia();
+            }
+        }
+
+        // 4. Actualizar Progreso (Simple con Prompt)
+        async function updateProgress(id, currentTitle) {
+            const newProgress = prompt(`Nuevo capítulo para ${currentTitle}:`);
+            if(newProgress) {
+                // Primero obtenemos el objeto actual (truco rápido) o enviamos solo lo que cambia
+                // Para simplificar, asumimos que el usuario solo quiere cambiar el progreso
+                // En una app real, haríamos un formulario modal.
+                await fetch(`${API_URL}/${id}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ 
+                        title: currentTitle, // Mantenemos el título
+                        progress: newProgress, // Cambiamos esto
+                        link: "" // Si envías vacío, cuidado con tu lógica de Go (se borrará si no validamos). 
+                        // *Nota para el usuario: Por ahora esto es básico.*
+                     })
+                });
+                loadMedia();
+            }
+        }
+
+        // Cargar al abrir
+        loadMedia();
+    </script>
+</body>
+</html>
